@@ -1,0 +1,14 @@
+﻿I'm sorry, but errors were detected in your script. Please correct the
+errors listed below, and try again.
+
+
+File "game/script.rpy", line 64: end of line expected.
+    hide sasha, main with Dissolve(1.0)
+              ^
+
+File "game/script.rpy", line 87: end of line expected.
+    hide sasha, main with Dissolve(0.5)
+              ^
+
+Ren'Py Version: Ren'Py 8.1.1.23060707
+Thu Aug  3 04:46:37 2023
