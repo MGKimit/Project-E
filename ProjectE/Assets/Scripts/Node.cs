@@ -127,28 +127,4 @@ namespace BehaviorTree
             return NodeState.FAILURE;
         }
     }
-
-    public class TimerNode : Node
-    {
-        protected bool nowRunningAction = true;
-        protected float delay;
-        float tmpTime = 0f;
-
-        protected bool Timer()
-        {
-            if (nowRunningAction == true) return false;
-
-            if (tmpTime < delay)
-            {
-                tmpTime += Time.deltaTime;
-                return false;
-            }
-            else
-            {
-                nowRunningAction = true;
-                tmpTime = 0;
-                return true;
-            }
-        }
-    }
 }

@@ -5,90 +5,51 @@ using UnityEngine;
 
 public class Actor : Tree
 {
-    SpriteRenderer _spriteRenderer;
-    Rigidbody2D _rigid;
-    Animator _animator;
+    public Vector2 _moveDirection;
+    public Vector2 MoveDirection { get { return _moveDirection; } }
 
-    public Animator Animator { get { return _animator; } }
+    MoveComponent _moveComponent;
+    public MoveComponent MoveComponent { get { return _moveComponent; } }
 
-    float _movedir;
+    DashComponent _dashComponent;
+    public DashComponent DashComponent { get { return _dashComponent; } }
 
-    private string _currentState;
+    JumpComponent _jumpComponent;
+    public JumpComponent JumpComponent { get { return _jumpComponent; } }
 
-    CanJump _canJump;
+    private BaseControl input;
+    public BaseControl Input { get { return input; } }
 
-    [SerializeField]
-    float _moveSpeed = 20;
+    private void OnEnable()
+    {
+        input = new BaseControl();
+        input.Enable();
+    }
 
-    [SerializeField]
-    float _jumpThrust = 5;
+    private void OnDisable()
+    {
+        input.Disable();
+    }
 
-    [SerializeField]
-    float _dashThrust = 8;
+    protected override void Update()
+    {
+        base.Update();
+    }
 
     // Start is called before the first frame update
     protected override void Start()
     {
-        _canJump = new CanJump(this);
-
         base.Start();
-        _spriteRenderer = GetComponent<SpriteRenderer>();
-        _rigid = GetComponent<Rigidbody2D>();
-        _animator = GetComponent<Animator>();
-    }
 
-    private void OnCollisionEnter2D(Collision2D col) => _canJump.OnCollisionEvent(col);
-
-    public void Dash()
-    {
-        if (_movedir == 0) return;
-
-        if(_rigid.velocity.x > 0 && _movedir == -1 || _rigid.velocity.x < 0 && _movedir == 1) // 움직임과 대쉬가 반대되는 경우
-        {
-            _rigid.velocity = new Vector2(0, _rigid.velocity.y); // 속도 한번 리셋
-        }
-
-
-        _rigid.AddForce(Vector2.right * _movedir * _dashThrust, ForceMode2D.Impulse);
-        _animator.SetTrigger("NowDash");
-    }
-
-    public void Jump()
-    {
-        _rigid.AddForce(Vector2.up * _jumpThrust, ForceMode2D.Impulse);
-        _animator.SetBool("NowJump", true);
-    }
-
-    public void ResetDirection()
-    {
-        _movedir = Input.GetAxisRaw("Horizontal");
-        if (_movedir == 1)
-        {
-            _animator.SetBool("NowWalk", true);
-
-            if (_spriteRenderer.flipX == true)
-            {
-                _spriteRenderer.flipX = false;
-            }
-        }
-        else if (_movedir == -1)
-        {
-            _animator.SetBool("NowWalk", true);
-
-            if (_spriteRenderer.flipX == false)
-            {
-                _spriteRenderer.flipX = true;
-            }
-        }
-        else if(_movedir == 0)
-        {
-            _animator.SetBool("NowWalk", false);
-        }
+        _moveComponent = GetComponent<MoveComponent>();
+        _dashComponent = GetComponent<DashComponent>();
+        _jumpComponent = GetComponent<JumpComponent>();
     }
 
     private void FixedUpdate()
     {
-        _rigid.AddForce(Vector2.right * _movedir * _moveSpeed, ForceMode2D.Force);
+        Vector2 direction = Input.Player.Movement.ReadValue<Vector2>();
+        _moveComponent.DoAction(direction.x);
     }
 
     protected override Node SetUp()
@@ -97,7 +58,7 @@ public class Actor : Tree
             new List<Node>
             {
                 new Sequence(new List<Node> { new CanDash(this), new Dash(this) }),
-                new Sequence(new List<Node> { _canJump, new Jump(this) }),
+                new Sequence(new List<Node> { new CanJump(this), new Jump(this) }),
                 new Sequence(new List<Node> { new Move(this) })
             }
         );
@@ -106,26 +67,28 @@ public class Actor : Tree
     }
 }
 
-public class CanDash : TimerNode
+public class CanDash : Node
 {
     Actor loadActor;
+    bool isDashPressed;
 
     public CanDash(Actor actor) : base()
     {
         loadActor = actor;
-        delay = 2.0f;
     }
 
     public override NodeState Evaluate()
     {
-        if (Input.GetKeyDown(KeyCode.LeftShift) && nowRunningAction == true)
+        isDashPressed = loadActor.Input.Player.Dash.ReadValue<float>() != 0f;
+
+        if (isDashPressed && loadActor.DashComponent.NowDashCooltime == false)
         {
             _state = NodeState.SUCCESS;
-            nowRunningAction = false;
         }
-        else _state = NodeState.FAILURE;
-
-        Timer();
+        else
+        {
+            _state = NodeState.FAILURE;
+        }
 
         return _state;
     }
@@ -142,8 +105,9 @@ public class Dash : Node
 
     public override NodeState Evaluate()
     {
-        loadActor.Dash();
-
+        Vector2 direction = loadActor.Input.Player.Movement.ReadValue<Vector2>();
+        loadActor.DashComponent.DoAction(direction.x);
+        loadActor.DashComponent.ResetMotion();
 
         _state = NodeState.SUCCESS;
         return _state;
@@ -153,27 +117,19 @@ public class Dash : Node
 public class CanJump : Node
 {
     Actor loadActor;
-    bool nowJump = false;
+    bool isJumpPressed;
 
     public CanJump(Actor actor) : base()
     {
         loadActor = actor;
     }
 
-    public void OnCollisionEvent(Collision2D col)
-    {
-        if(col.gameObject.CompareTag("Floor") && nowJump == true)
-        {
-            nowJump = false;
-            loadActor.Animator.SetBool("NowJump", false);
-        }
-    }
-
     public override NodeState Evaluate()
     {
-        if (Input.GetKeyDown(KeyCode.Space) && nowJump == false)
+        isJumpPressed = loadActor.Input.Player.Jump.ReadValue<float>() != 0f;
+
+        if (isJumpPressed && loadActor.JumpComponent.OnAir == false)
         {
-            nowJump = true;
             _state = NodeState.SUCCESS;
         }
         else _state = NodeState.FAILURE;
@@ -193,7 +149,8 @@ public class Jump : Node
 
     public override NodeState Evaluate()
     {
-        loadActor.Jump();
+        loadActor.JumpComponent.DoAction();
+        loadActor.JumpComponent.ResetMotion();
 
         _state = NodeState.SUCCESS;
         return _state;
@@ -211,7 +168,8 @@ public class Move : Node
 
     public override NodeState Evaluate()
     {
-        loadActor.ResetDirection();
+        Vector2 direction = loadActor.Input.Player.Movement.ReadValue<Vector2>();
+        loadActor.MoveComponent.ResetMotion(direction.x);
 
         _state = NodeState.SUCCESS;
         return _state;
